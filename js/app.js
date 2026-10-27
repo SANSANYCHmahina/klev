@@ -3,7 +3,7 @@ import { $, $$, el, esc, copyText, isDesktop, fDist, HOUR } from './util.js';
 import { icon, floatSVG } from './icons.js';
 import { fetchOverview } from './weather.js';
 import { L } from './map.js';
-import { DEPTH_LAYERS } from './depth.js';
+import { DEPTH_LAYERS, DEPTH_PALETTE, DEPTH_STEP } from './depth.js';
 import * as S from './store.js';
 import * as V from './views.js';
 
@@ -145,6 +145,7 @@ function initDepth() {
     return { def, layer };
   });
   $('#depth-name').textContent = DEPTH_LAYERS.map(d => d.name).join(', ');
+  drawDepthLegend();
   const op = $('#depth-opacity');
   op.value = Math.round(depth.opacity * 100);
   op.oninput = () => {
@@ -163,6 +164,70 @@ function initDepth() {
     toast('Слой на исходном месте');
   };
   if (st.on) setDepth(true, false);
+}
+
+// Легенда шкалы глубин в панели.
+function drawDepthLegend() {
+  const box = $('#depth-legend');
+  if (!box) return;
+  const n = DEPTH_PALETTE.length;
+  const stops = DEPTH_PALETTE.map((c, i) => `${c} ${(i / n * 100).toFixed(2)}% ${((i + 1) / n * 100).toFixed(2)}%`).join(', ');
+  const ticks = [];
+  for (let m = 0; m < n * DEPTH_STEP; m += 2) ticks.push(`<span style="left:${(m / (n * DEPTH_STEP) * 100).toFixed(2)}%">${m}</span>`);
+  box.innerHTML = `<div class="dl-bar" style="background:linear-gradient(90deg, ${stops})"></div><div class="dl-ticks">${ticks.join('')}<span class="dl-u">м</span></div>`;
+}
+
+// Глубина по сетке слоя: работает и когда слой скрыт, и без интернета.
+function loadDepthGrid(d) {
+  if (!d.def.grid) return Promise.resolve(null);
+  if (!d.gridP) {
+    d.gridP = new Promise(res => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const c = document.createElement('canvas');
+          c.width = img.naturalWidth; c.height = img.naturalHeight;
+          const x = c.getContext('2d', { willReadFrequently: true });
+          x.drawImage(img, 0, 0);
+          res({ data: x.getImageData(0, 0, c.width, c.height).data, w: c.width, h: c.height });
+        } catch { res(null); }
+      };
+      img.onerror = () => res(null);
+      img.src = d.def.grid;
+    });
+  }
+  return d.gridP;
+}
+
+const mercX = lon => (lon + 180) / 360;
+const mercY = lat => { const t = Math.sin(lat * Math.PI / 180); return 0.5 - Math.log((1 + t) / (1 - t)) / (4 * Math.PI); };
+
+async function depthAt(lat, lon) {
+  for (const d of depth.layers) {
+    const [[south, west], [north, east]] = d.layer.getBounds();
+    if (lat < south || lat > north || lon < west || lon > east) continue;
+    const g = await loadDepthGrid(d);
+    if (!g) continue;
+    const u = (mercX(lon) - mercX(west)) / (mercX(east) - mercX(west));
+    const v = (mercY(lat) - mercY(north)) / (mercY(south) - mercY(north));
+    const gx = Math.floor(u * g.w), gy = Math.floor(v * g.h);
+    // у самого берега ищем ближайшую клетку с водой (до ~5 м)
+    for (let r = 0; r <= 3; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+          const x = gx + dx, y = gy + dy;
+          if (x < 0 || y < 0 || x >= g.w || y >= g.h) continue;
+          const val = g.data[(y * g.w + x) * 4];
+          if (val >= 248) continue;
+          const b = Math.round(val / 8);
+          return { lo: b * DEPTH_STEP, hi: (b + 1) * DEPTH_STEP, color: DEPTH_PALETTE[b] || DEPTH_PALETTE[DEPTH_PALETTE.length - 1], name: d.def.name, edge: r > 0 };
+        }
+      }
+    }
+    return null;
+  }
+  return null;
 }
 
 function nearestDepth() {
@@ -380,6 +445,7 @@ async function openPoint(lat, lon, preset = {}) {
     });
   }
   loadPointWx(my);
+  depthAt(lat, lon).then(d => { if (point === my) V.setDepth(node, d); });
 }
 
 async function loadPointWx(my) {
@@ -542,6 +608,7 @@ function openSpot(id) {
   highlightSpot(id);
   if (!same) focus(spot.lat, spot.lon, map ? Math.max(map.getZoom(), 13) : undefined);
   V.loadSpotWeather(spot, node);
+  depthAt(spot.lat, spot.lon).then(d => { if (node.isConnected) V.setDepth(node, d); });
 }
 
 function refreshSpot(id) {
@@ -555,6 +622,7 @@ function refreshSpot(id) {
     sheetBody.scrollTop = top;
     highlightSpot(id);
     V.loadSpotWeather(spot, node);
+    depthAt(spot.lat, spot.lon).then(d => { if (node.isConnected) V.setDepth(node, d); });
   }
 }
 
@@ -784,6 +852,7 @@ const ctx = {
   toast, ask, askText, viewer,
   me: () => me,
   savePoint,
+  depthAt,
   refreshSpot,
   refreshMarkers: renderSpotMarkers,
   canInstall: () => !!installEvt,

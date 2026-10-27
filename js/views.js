@@ -216,6 +216,7 @@ export function pointSheet(pt) {
       <h2 class="sh-title" data-f="name">${esc(pt.name || 'Без названия')}</h2>
       <div class="sh-sub" data-f="sub">${esc(pt.sub || '')}</div>
       ${coordsRow(pt.lat, pt.lon)}
+      <div class="depth-row" data-f="depth" hidden></div>
       <div class="sh-actions">
         <button type="button" class="btn accent" data-act="save">${icon('pin')}Сохранить метку</button>
         <a class="btn" href="${routeURL(pt)}" target="_blank" rel="noopener">${icon('route')}Маршрут</a>
@@ -226,6 +227,15 @@ export function pointSheet(pt) {
   $('[data-act=close]', node).onclick = () => ctx.go('#map');
   $('[data-act=save]', node).onclick = e => { e.currentTarget.disabled = true; ctx.savePoint(); };
   return node;
+}
+
+// Глубина по карте глубин в шапке карточки.
+export function setDepth(node, d) {
+  const box = $('[data-f=depth]', node);
+  if (!box) return;
+  if (!d) { box.hidden = true; return; }
+  box.hidden = false;
+  box.innerHTML = `<span class="sw" style="background:${d.color}"></span><span><b>Глубина ≈ ${numT(d.lo, 1)}–${numT(d.hi, 1)} м</b><small>по карте глубин${d.edge ? ', у самого берега' : ''}</small></span>`;
 }
 
 export function setPointPlace(node, place) {
@@ -255,6 +265,7 @@ export function spotSheet(spot) {
       <h2 class="sh-title">${esc(spot.name)}</h2>
       ${placeLine ? `<div class="sh-sub">${esc(placeLine)}</div>` : ''}
       ${coordsRow(spot.lat, spot.lon)}
+      <div class="depth-row" data-f="depth" hidden></div>
       <div class="sh-actions">
         <a class="btn accent" href="#new-${spot.id}">${icon('plus')}Отчёт о рыбалке</a>
         <a class="btn" href="${routeURL(spot)}" target="_blank" rel="noopener">${icon('route')}Маршрут</a>
@@ -619,6 +630,10 @@ export function formPage({ spotId, reportId }) {
   drawPhotos();
 
   $('[data-act=back]', node).onclick = () => ctx.back(editing ? '#report-' + editing.id : '#spot-' + spot0.id);
+  ctx.depthAt(spot0.lat, spot0.lon).then(d => {
+    const inp = $('#rf-depth', node);
+    if (d && inp && !inp.value) inp.placeholder = `по карте ${numT(d.lo, 1)}–${numT(d.hi, 1)}`;
+  });
 
   let busy = false;
   $('#rf', node).addEventListener('submit', async e => {
