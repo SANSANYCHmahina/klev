@@ -1,5 +1,5 @@
 // Service worker: приложение и просмотренные куски карты работают без интернета.
-const VERSION = 'klev-v3';
+const VERSION = 'klev-v4';
 const SHELL = VERSION + '-shell';
 const TILES = 'klev-tiles';
 const LIBS = 'klev-libs';

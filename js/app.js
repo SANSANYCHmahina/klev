@@ -118,6 +118,8 @@ function setLayer(mode) {
 // ---------- слой глубин ----------
 const depth = { layers: [], on: false, opacity: 0.85, adjust: false };
 
+const depthKey = def => (def.rev ? `${def.id}@${def.rev}` : def.id);
+
 function depthState() {
   try { return JSON.parse(localStorage.getItem('klev:depth') || '{}'); } catch { return {}; }
 }
@@ -126,7 +128,7 @@ function saveDepth() {
     localStorage.setItem('klev:depth', JSON.stringify({
       on: depth.on,
       opacity: depth.opacity,
-      offsets: Object.fromEntries(depth.layers.map(d => [d.def.id, d.layer.getOffset()])),
+      offsets: Object.fromEntries(depth.layers.map(d => [depthKey(d.def), d.layer.getOffset()])),
     }));
   } catch {}
 }
@@ -137,7 +139,8 @@ function initDepth() {
   depth.opacity = st.opacity ?? 0.85;
   depth.layers = DEPTH_LAYERS.map(def => {
     const layer = L.imageOverlay(def.url, def.bounds, { opacity: depth.opacity, attribution: def.attribution, levels: def.levels, width: def.width });
-    const off = st.offsets && st.offsets[def.id];
+    // поправка хранится для конкретной версии привязки слоя: после уточнения координат старая не применяется
+    const off = st.offsets && st.offsets[depthKey(def)];
     if (off) layer.setOffset(off.lat, off.lng);
     return { def, layer };
   });
