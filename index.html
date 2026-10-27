@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Клёв — журнал рыбалки</title>
+<meta name="description" content="Карта мест, давление и ветер, журнал рыбалок с фото и погодой">
+<meta name="theme-color" content="#0e3a44">
+<meta name="color-scheme" content="light dark">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Клёв">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=Unbounded:wght@500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="map" aria-label="Карта"></div>
+
+<form id="search" class="search" role="search" autocomplete="off">
+  <span class="search-i" data-icon="search"></span>
+  <input id="search-q" type="search" placeholder="Водоём, посёлок или координаты" enterkeyhint="search" aria-label="Поиск места">
+  <button type="button" id="search-clear" class="icon-btn sm" hidden aria-label="Очистить" data-icon="close"></button>
+</form>
+<div id="search-results" class="search-results" hidden></div>
+
+<div class="map-ctrls">
+  <button type="button" id="btn-layers" class="ctrl" data-icon="layers" aria-label="Показать спутник"><span class="lbl">Спутник</span></button>
+  <button type="button" id="btn-locate" class="ctrl" data-icon="locate" aria-label="Где я"><span class="lbl">Где я</span></button>
+  <button type="button" id="btn-depth" class="ctrl" data-icon="depth" aria-label="Глубины" aria-pressed="false"><span class="lbl">Глубины</span></button>
+</div>
+
+<div id="depth-panel" class="depth-panel" hidden>
+  <div class="dp-row">
+    <span class="dp-t" data-icon="depth"><span><b>Глубины</b><small id="depth-name"></small></span></span>
+    <button type="button" id="depth-go" class="link-btn">К участку</button>
+    <button type="button" id="depth-close" class="icon-btn sm" aria-label="Скрыть глубины" data-icon="close"></button>
+  </div>
+  <div class="dp-row dp-normal">
+    <label class="dp-op" for="depth-opacity"><span>Видимость слоя</span><input type="range" id="depth-opacity" min="20" max="100" step="5"></label>
+    <button type="button" id="depth-move" class="btn sm">Подвинуть</button>
+  </div>
+  <p class="dp-adj dp-hint">Перетащите слой, чтобы берега совпали со спутником. Карту можно приближать как обычно.</p>
+  <div class="dp-row dp-adj">
+    <button type="button" id="depth-reset" class="btn sm ghost">Сбросить</button>
+    <button type="button" id="depth-done" class="btn sm accent">Готово</button>
+  </div>
+</div>
+
+<button type="button" id="btn-mark-here" class="mark-here" data-icon="pin"><span class="lbl">Метка здесь</span></button>
+<div class="offline-chip" data-icon="wifiOff">Нет сети — показываю сохранённое</div>
+
+<section id="sheet" class="sheet" hidden aria-label="Подробности">
+  <div class="sheet-grip" id="sheet-grip" role="button" tabindex="0" aria-label="Развернуть или свернуть"><span></span></div>
+  <div class="sheet-body" id="sheet-body"></div>
+</section>
+
+<section id="page" class="page" hidden></section>
+
+<nav class="tabbar" id="tabbar" aria-label="Разделы">
+  <a href="#map" data-tab="map" data-icon="map"><span>Карта</span></a>
+  <a href="#spots" data-tab="spots" data-icon="spots"><span>Места</span></a>
+  <a href="#journal" data-tab="journal" data-icon="book"><span>Журнал</span></a>
+</nav>
+
+<div id="modal" class="modal" hidden></div>
+<div id="viewer" class="viewer" hidden></div>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<script>
+if (location.protocol === 'file:') {
+  var w = document.createElement('div');
+  w.className = 'file-warn';
+  w.innerHTML = '<b>Так приложение не запустится</b><p>Браузер не даёт открывать его как файл. Закройте эту вкладку и дважды щёлкните <b>start.bat</b> в папке klev — приложение откроется по адресу http://localhost:8000.</p>';
+  document.body.appendChild(w);
+}
+</script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
