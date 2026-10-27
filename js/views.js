@@ -198,7 +198,7 @@ export function weatherLive(wx, { stale = false } = {}) {
     </div>
     ${chartsHTML('Давление', 'неделя назад → прогноз на 3 дня')}
     ${daysStrip(wx, now)}
-    <div class="wx-src">Open-Meteo${wx.models ? ' · ' + wx.models : ''} · ${stale ? 'сохранено' : 'обновлено'} ${fDate(wx.fetchedAt)}, ${fTime(wx.fetchedAt)}${wx.elev != null ? ` · высота ${Math.round(wx.elev)} м` : ''}</div>
+    <div class="wx-src">Open-Meteo${wx.models ? ' · ' + wx.models : ''}${wx.via === 'site' ? ' · через ваш сайт' : ''} · ${stale ? 'сохранено' : 'данные на'} ${fDate(wx.fetchedAt)}, ${fTime(wx.fetchedAt)}${wx.elev != null ? ` · высота ${Math.round(wx.elev)} м` : ''}</div>
   </div>`);
   charts(node, wx, { from: now - 7 * DAY, to: now + 3 * DAY, now });
   const bite = biteBlock(wx, now);

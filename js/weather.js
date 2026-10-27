@@ -37,14 +37,54 @@ export const NEAR_MODEL = 'icon_seamless';
 export const FAR_MODEL = 'ecmwf_ifs025';
 const NEAR_DAYS = 3;
 
-// Сейчас + 7 дней назад + прогноз на 7 дней.
+// ---------- погода с собственного сайта (сетка над Ростовской областью) ----------
+// Open-Meteo из России без VPN часто недоступен. Поэтому GitHub раз в несколько часов скачивает
+// погоду по сетке точек (шаг 0,25°) и кладёт файлы wx/<широта>_<долгота>.json на этот же сайт.
+export const GRID = { lat0: 46.5, lat1: 48.0, lon0: 38.0, lon1: 42.25, step: 0.25 };
+
+export function gridKey(lat, lon) {
+  const g = GRID, h = g.step / 2;
+  if (lat < g.lat0 - h || lat > g.lat1 + h || lon < g.lon0 - h || lon > g.lon1 + h) return null;
+  const la = g.lat0 + Math.round((lat - g.lat0) / g.step) * g.step;
+  const lo = g.lon0 + Math.round((lon - g.lon0) / g.step) * g.step;
+  return la.toFixed(2) + '_' + lo.toFixed(2);
+}
+
+async function fromGrid(lat, lon) {
+  const k = gridKey(lat, lon);
+  if (!k) return null;
+  try {
+    const r = await fetchT(`wx/${k}.json`, 10000, { cache: 'no-cache' });
+    if (!r.ok) return null;
+    const j = await r.json();
+    if (!j || !j.base || !j.base.hourly) return null;
+    const wx = normalize(j.base, lat, lon);
+    if (j.models) mergeModels(wx, j.models);
+    wx.fetchedAt = (j.fetched || 0) * 1000 || Date.now();
+    wx.via = 'site';
+    return wx;
+  } catch {
+    return null;
+  }
+}
+
+// Сейчас + неделя назад + прогноз на 7 дней.
 export async function fetchOverview(lat, lon) {
-  const p = new URLSearchParams({ ...base(lat, lon), current: CURRENT, hourly: HOURLY, daily: DAILY, past_days: 7, forecast_days: 7 });
-  const pm = new URLSearchParams({ ...base(lat, lon), hourly: HOURLY, models: `${NEAR_MODEL},${FAR_MODEL}`, past_days: 7, forecast_days: 7 });
-  const [j, jm] = await Promise.all([getJSON(API + '?' + p), getJSON(API + '?' + pm).catch(() => null)]);
-  const wx = normalize(j, lat, lon);
-  if (jm) mergeModels(wx, jm);
-  return wx;
+  const g = await fromGrid(lat, lon);
+  if (g && Date.now() - g.fetchedAt < 12 * HOUR) return g;
+  try {
+    const p = new URLSearchParams({ ...base(lat, lon), current: CURRENT, hourly: HOURLY, daily: DAILY, past_days: 7, forecast_days: 7 });
+    const pm = new URLSearchParams({ ...base(lat, lon), hourly: HOURLY, models: `${NEAR_MODEL},${FAR_MODEL}`, past_days: 7, forecast_days: 7 });
+    const [j, jm] = await Promise.all([getJSON(API + '?' + p), getJSON(API + '?' + pm).catch(() => null)]);
+    const wx = normalize(j, lat, lon);
+    if (jm) mergeModels(wx, jm);
+    return wx;
+  } catch (e) {
+    if (g) return g; // устаревшие, но лучше, чем ничего
+    throw new Error(gridKey(lat, lon)
+      ? 'Погода пока не загрузилась. Проверьте интернет и нажмите «Повторить».'
+      : 'Погодный сервис недоступен: это место вне зоны, где погода приходит через ваш сайт, а Open-Meteo без VPN не открывается.');
+  }
 }
 
 const HKEYS = {
@@ -121,6 +161,13 @@ const isoUTC = ms => new Date(ms).toISOString().slice(0, 10);
 // Почасовая погода за произвольный промежуток (для отчётов и меток).
 // Последние ~3 месяца берём из прогнозного API, всё что старше — из архива.
 export async function fetchRange(lat, lon, fromMs, toMs) {
+  const g = await fromGrid(lat, lon);
+  if (g && g.hours.length && fromMs >= g.hours[0].t && toMs <= g.hours[g.hours.length - 1].t) {
+    g.hours = g.hours.filter(h => h.t >= fromMs - 2 * HOUR && h.t <= toMs + 12 * HOUR);
+    g.days = g.days.filter(d => d.t >= fromMs - DAY && d.t <= toMs + DAY);
+    g.source = 'forecast';
+    if (g.hours.some(h => h.p != null)) return g;
+  }
   const now = Date.now();
   const archive = fromMs < now - 80 * DAY;
   const start = fromMs - DAY;
