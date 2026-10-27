@@ -31,10 +31,89 @@ const base = (lat, lon) => ({
   wind_speed_unit: 'ms',
 });
 
+// Модели прогноза: ICON (DWD, сетка до ~7 км над Европой и югом России) — на ближайшие 3 дня,
+// ECMWF IFS — дальше. Если какой-то модели нет данных, берём другую, а в крайнем случае — общую смесь.
+export const NEAR_MODEL = 'icon_seamless';
+export const FAR_MODEL = 'ecmwf_ifs025';
+const NEAR_DAYS = 3;
+
 // Сейчас + 7 дней назад + прогноз на 7 дней.
 export async function fetchOverview(lat, lon) {
   const p = new URLSearchParams({ ...base(lat, lon), current: CURRENT, hourly: HOURLY, daily: DAILY, past_days: 7, forecast_days: 7 });
-  return normalize(await getJSON(API + '?' + p), lat, lon);
+  const pm = new URLSearchParams({ ...base(lat, lon), hourly: HOURLY, models: `${NEAR_MODEL},${FAR_MODEL}`, past_days: 7, forecast_days: 7 });
+  const [j, jm] = await Promise.all([getJSON(API + '?' + p), getJSON(API + '?' + pm).catch(() => null)]);
+  const wx = normalize(j, lat, lon);
+  if (jm) mergeModels(wx, jm);
+  return wx;
+}
+
+const HKEYS = {
+  temp: 'temperature_2m', hum: 'relative_humidity_2m', p: 'surface_pressure', pm: 'pressure_msl', prec: 'precipitation',
+  cloud: 'cloud_cover', ws: 'wind_speed_10m', wd: 'wind_direction_10m', wg: 'wind_gusts_10m', code: 'weather_code',
+};
+
+function mergeModels(wx, jm) {
+  const H = jm.hourly;
+  if (!H || !H.time) return;
+  const cut = Date.now() + NEAR_DAYS * DAY;
+  const at = new Map(wx.hours.map((h, i) => [h.t, i]));
+  let used = 0;
+  H.time.forEach((t, i) => {
+    const k = at.get(t * 1000);
+    if (k == null) return;
+    const order = t * 1000 <= cut ? [NEAR_MODEL, FAR_MODEL] : [FAR_MODEL, NEAR_MODEL];
+    const h = wx.hours[k];
+    for (const [f, v] of Object.entries(HKEYS)) {
+      for (const m of order) {
+        const arr = H[`${v}_${m}`];
+        if (arr && arr[i] != null) { h[f] = arr[i]; used++; break; }
+      }
+    }
+  });
+  if (!used) return;
+  // суточные значения пересчитываем по объединённым часам (восход/закат остаются)
+  for (const d of wx.days) {
+    const hs = wx.hours.filter(h => h.t >= d.t && h.t < d.t + DAY);
+    if (hs.length < 12) continue;
+    const v = k => hs.map(h => h[k]).filter(x => x != null);
+    const t = v('temp'), ws = v('ws'), wg = v('wg'), pr = v('prec');
+    if (t.length) { d.tmax = Math.max(...t); d.tmin = Math.min(...t); }
+    if (ws.length) d.wsmax = Math.max(...ws);
+    if (wg.length) d.wgmax = Math.max(...wg);
+    if (pr.length) d.prec = pr.reduce((a, b) => a + b, 0);
+    let sx = 0, sy = 0;
+    hs.forEach(h => { if (h.wd != null && h.ws != null) { const r = h.wd * Math.PI / 180; sx += Math.sin(r) * h.ws; sy += Math.cos(r) * h.ws; } });
+    if (sx || sy) d.wd = (Math.atan2(sx, sy) * 180 / Math.PI + 360) % 360;
+  }
+  wx.models = 'ICON + ECMWF';
+}
+
+// Нагон и сгон в дельте Дона и Таганрогском заливе.
+// Ветер с запада-юго-запада («низовка») гонит воду из моря в залив и дельту — уровень растёт,
+// с востока-северо-востока («верховка») — сгоняет, уровень падает. Считаем среднюю составляющую
+// ветра вдоль оси залива за сутки до момента и сутки после.
+const BAY_AXIS = 245;
+export const inSurgeArea = (lat, lon) => lat > 46.8 && lat < 47.45 && lon > 38.0 && lon < 39.95;
+
+export function surge(hours, t) {
+  const comp = h => (h.ws == null || h.wd == null ? null : h.ws * Math.cos((h.wd - BAY_AXIS) * Math.PI / 180));
+  const avg = (a, b) => {
+    const v = hours.filter(h => h.t > a && h.t <= b).map(comp).filter(x => x != null);
+    return v.length >= 6 ? v.reduce((s, x) => s + x, 0) / v.length : null;
+  };
+  const lvl = v => (v == null ? null : v >= 9 ? 2 : v >= 5 ? 1 : v <= -9 ? -2 : v <= -5 ? -1 : 0);
+  const past = avg(t - DAY, t), next = avg(t, t + DAY);
+  return { past, next, now: lvl(past), soon: lvl(next) };
+}
+
+export function surgeText(l) {
+  return {
+    2: 'Сильный нагон — вода прибывает',
+    1: 'Возможен нагон — вода может прибывать',
+    0: 'Ветер воду не гонит — уровень спокойный',
+    '-1': 'Возможен сгон — вода может уходить',
+    '-2': 'Сильный сгон — вода уходит',
+  }[l];
 }
 
 const isoUTC = ms => new Date(ms).toISOString().slice(0, 10);

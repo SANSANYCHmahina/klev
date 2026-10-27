@@ -5,7 +5,7 @@ import {
 } from './util.js';
 import { icon, wxIcon, windArrow, floatSVG } from './icons.js';
 import { chart, dial, moonIcon } from './charts.js';
-import { pressureAt, windowStats, dayOf, dayPressure, moon, wcode } from './weather.js';
+import { pressureAt, windowStats, dayOf, dayPressure, moon, wcode, surge, surgeText, inSurgeArea } from './weather.js';
 import * as S from './store.js';
 
 let ctx = null;
@@ -94,7 +94,7 @@ function daysStrip(wx, now) {
       <div class="d-n">${i === 0 && today ? 'Сегодня' : fDay(d.t + 12 * HOUR, wx.off)}</div>
       <div class="d-i" title="${esc(w.text)}">${wxIcon(w.icon)}</div>
       <div class="d-t"><b>${temp(d.tmax)}</b><span>${temp(d.tmin)}</span></div>
-      <div class="d-w">${windArrow(d.wd)}${num(d.wsmax, 0)} м/с</div>
+      <div class="d-w">${windArrow(d.wd)}<b>${compass(d.wd)}</b> ${num(d.wsmax, 0)} м/с</div>
       <div class="d-p">${p != null ? num(p) + ' мм' : '—'}</div>
     </div>`;
   }).join('')}</div></div>`;
@@ -120,6 +120,19 @@ const chartsHTML = (pTitle, pNote) => `
   <div class="wx-chart"><div class="ch-head"><h4>Давление, мм рт. ст.</h4><span>${pNote}</span></div><div data-c="p"></div></div>
   <div class="wx-chart"><div class="ch-head"><h4>Ветер, м/с</h4><span class="legend"><i class="lg ws"></i>средний<i class="lg wg"></i>порывы</span></div><div data-c="w"></div></div>`;
 
+// Подсказка про нагон/сгон (только дельта Дона и Таганрогский залив).
+function surgeRow(wx, t, withForecast) {
+  if (!inSurgeArea(wx.lat, wx.lon)) return '';
+  const s = surge(wx.hours, t);
+  if (s.now == null) return '';
+  const dir = s.now > 0 ? 'up' : s.now < 0 ? 'down' : 'flat';
+  const arrow = s.now > 0 ? '↑' : s.now < 0 ? '↓' : '→';
+  const wind = s.past > 0.5 ? `низовка (с моря), в среднем ${num(s.past, 1)} м/с вдоль залива` : s.past < -0.5 ? `верховка (с суши), в среднем ${num(-s.past, 1)} м/с вдоль залива` : 'ветер вдоль залива слабый';
+  let next = '';
+  if (withForecast && s.soon != null && s.soon !== s.now) next = `<span class="sg-next">В ближайшие сутки: ${surgeText(s.soon).toLowerCase()}</span>`;
+  return `<div class="surge ${dir} lv${Math.abs(s.now)}"><div class="sg-h"><b>${arrow}</b> ${surgeText(s.now)}</div><span class="sg-s">За сутки${withForecast ? '' : ' до начала'}: ${wind}.</span>${next}</div>`;
+}
+
 export function weatherLive(wx, { stale = false } = {}) {
   const now = Date.now();
   const c = wx.current && now - wx.current.t < 3 * HOUR ? wx.current : nearestHour(wx.hours, now) || {};
@@ -138,6 +151,7 @@ export function weatherLive(wx, { stale = false } = {}) {
         <div class="s">${[pr.ch24 != null ? `${signed(pr.ch24)} мм за сутки` : '', pr.next24 != null ? `прогноз ${signed(pr.next24)} мм` : ''].filter(Boolean).join(' · ')}</div>
       </div>
     </div>
+    ${surgeRow(wx, now, true)}
     <div class="wx-grid">
       ${cell('Ветер', `${windArrow(c.wd)}${num(c.ws, 1)}<small>м/с</small> <span class="v-t">${compass(c.wd)}</span>`, c.wg != null ? `порывы до ${num(c.wg, 0)} м/с` : '')}
       ${cell('Воздух', temp(c.temp), today ? `днём ${temp(today.tmax)}, ночью ${temp(today.tmin)}` : '')}
@@ -148,7 +162,7 @@ export function weatherLive(wx, { stale = false } = {}) {
     </div>
     ${chartsHTML('Давление', 'неделя назад → прогноз на 3 дня')}
     ${daysStrip(wx, now)}
-    <div class="wx-src">Open-Meteo · ${stale ? 'сохранено' : 'обновлено'} ${fDate(wx.fetchedAt)}, ${fTime(wx.fetchedAt)}${wx.elev != null ? ` · высота ${Math.round(wx.elev)} м` : ''}</div>
+    <div class="wx-src">Open-Meteo${wx.models ? ' · ' + wx.models : ''} · ${stale ? 'сохранено' : 'обновлено'} ${fDate(wx.fetchedAt)}, ${fTime(wx.fetchedAt)}${wx.elev != null ? ` · высота ${Math.round(wx.elev)} м` : ''}</div>
   </div>`);
   charts(node, wx, { from: now - 7 * DAY, to: now + 3 * DAY, now });
   return node;
@@ -173,6 +187,7 @@ export function weatherWindow(wx, from, to, { label = 'рыбалка' } = {}) {
         <div class="s">За сутки до начала ${signed(b.ch24)} мм, за 3 дня ${signed(b.ch72)} мм. За время рыбалки ${signed(st.pEnd != null && st.pStart != null ? st.pEnd - st.pStart : null)} мм.</div>
       </div>
     </div>
+    ${surgeRow(wx, from, false)}
     <div class="wx-grid">
       ${cell('Ветер', `${windArrow(st.wd)}${num(st.ws, 1)}<small>м/с</small> <span class="v-t">${compass(st.wd)}</span>`, st.wg != null ? `порывы до ${num(st.wg, 0)} м/с` : '')}
       ${cell('Воздух', st.tmin != null && Math.round(st.tmin) !== Math.round(st.tmax) ? `${temp(st.tmin)}…${temp(st.tmax)}` : temp(st.tmax), day ? `за сутки ${temp(day.tmin)}…${temp(day.tmax)}` : '')}
