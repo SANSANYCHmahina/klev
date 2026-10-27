@@ -7,6 +7,7 @@ import { icon, wxIcon, windArrow, floatSVG } from './icons.js';
 import { chart, dial, moonIcon } from './charts.js';
 import { pressureAt, windowStats, dayOf, dayPressure, moon, wcode, surge, surgeText, inSurgeArea } from './weather.js';
 import * as S from './store.js';
+import { SPECIES, SCORE_WORD, biteForecast, biteDay } from './bite.js';
 
 let ctx = null;
 export const setCtx = c => { ctx = c; };
@@ -133,6 +134,41 @@ function surgeRow(wx, t, withForecast) {
   return `<div class="surge ${dir} lv${Math.abs(s.now)}"><div class="sg-h"><b>${arrow}</b> ${surgeText(s.now)}</div><span class="sg-s">За сутки${withForecast ? '' : ' до начала'}: ${wind}.</span>${next}</div>`;
 }
 
+// ---------- прогноз клёва ----------
+const scoreDots = n => `<span class="dots" aria-hidden="true">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= n ? 'on' : ''}"></i>`).join('')}</span>`;
+
+function biteDetail(day, off) {
+  const w = day.items[0].water;
+  return (w ? `<p class="bd-water">Вода ≈ ${num(w.tw, 0)} °C — оценка по воздуху за последние дни${w.trend <= -2 ? ', холодает' : w.trend >= 2 ? ', теплеет' : ''}.</p>` : '') +
+    day.items.map(it => `<div class="bd-sp">
+      <div class="bd-h"><b>${it.name}</b><span class="sc s${it.score}">${scoreDots(it.score)}${it.score} · ${SCORE_WORD[it.score]}</span></div>
+      ${it.best.length ? `<div class="bd-best">Лучшее время: ${it.best.join(', ')}</div>` : ''}
+      <ul class="bd-why">${it.plus.map(t => `<li class="p">${esc(t)}</li>`).join('')}${it.minus.map(t => `<li class="m">${esc(t)}</li>`).join('')}</ul>
+    </div>`).join('');
+}
+
+function biteBlock(wx, now) {
+  const days = biteForecast(wx, now, 4);
+  if (!days.length) return null;
+  const node = el(`<div class="bite">
+    <div class="ch-head"><h4>Прогноз клёва</h4><span>по погоде и рыбацким приметам</span></div>
+    <div class="bite-grid" style="grid-template-columns: 74px repeat(${days.length}, minmax(0, 1fr))">
+      <span></span>${days.map((d, i) => `<button type="button" class="bg-day${i === 0 ? ' on' : ''}" data-i="${i}">${i === 0 ? 'Сегодня' : fDay(d.t, wx.off)}</button>`).join('')}
+      ${SPECIES.map((sp, k) => `<span class="bg-sp">${sp.name}</span>${days.map((d, i) => `<button type="button" class="bg-cell s${d.items[k].score}${i === 0 ? ' on' : ''}" data-i="${i}" aria-label="${sp.name}: ${d.items[k].score} из 5">${d.items[k].score}</button>`).join('')}`).join('')}
+    </div>
+    <div class="bite-detail" data-f="bd"></div>
+    <p class="bite-note">Это подсказка по приметам, а не гарантия. Сравнивайте с отчётами — так станет видно, что работает именно у вас.</p>
+  </div>`);
+  const det = $('[data-f=bd]', node);
+  const pick = i => {
+    $$('.bg-day, .bg-cell', node).forEach(b => b.classList.toggle('on', +b.dataset.i === i));
+    det.innerHTML = biteDetail(days[i], wx.off);
+  };
+  $$('.bg-day, .bg-cell', node).forEach(b => { b.onclick = () => pick(+b.dataset.i); });
+  pick(0);
+  return node;
+}
+
 export function weatherLive(wx, { stale = false } = {}) {
   const now = Date.now();
   const c = wx.current && now - wx.current.t < 3 * HOUR ? wx.current : nearestHour(wx.hours, now) || {};
@@ -165,6 +201,8 @@ export function weatherLive(wx, { stale = false } = {}) {
     <div class="wx-src">Open-Meteo${wx.models ? ' · ' + wx.models : ''} · ${stale ? 'сохранено' : 'обновлено'} ${fDate(wx.fetchedAt)}, ${fTime(wx.fetchedAt)}${wx.elev != null ? ` · высота ${Math.round(wx.elev)} м` : ''}</div>
   </div>`);
   charts(node, wx, { from: now - 7 * DAY, to: now + 3 * DAY, now });
+  const bite = biteBlock(wx, now);
+  if (bite) $('.wx-grid', node).after(bite);
   return node;
 }
 
@@ -399,6 +437,13 @@ function insights(reps) {
   const topBait = Object.entries(bait).sort((a, b) => b[1] - a[1])[0];
   if (topBait) lines.push(`Лучше всего работает <b>${esc(topBait[0])}</b> — ${topBait[1]} ${plural(topBait[1], 'рыба', 'рыбы', 'рыб')}.`);
   const ps = lucky.map(r => r.weather && windowStats(r.weather.hours, r.startMs, r.endMs)).filter(s => s && s.pStart != null);
+  for (const sp of SPECIES) {
+    const rs = reps.filter(r => r.weather && (r.fish || []).some(f => (f.species || '').trim().toLowerCase() === sp.name.toLowerCase() && (+f.count || +f.kg)));
+    const st = rs.map(r => windowStats(r.weather.hours, r.startMs, r.endMs)).filter(x => x && x.pStart != null);
+    if (!st.length) continue;
+    const pv = st.map(x => x.pStart), wv = st.map(x => x.ws).filter(v => v != null);
+    lines.push(`<b>${sp.name}</b> ловился при давлении ${num(Math.min(...pv))}–${num(Math.max(...pv))} мм${wv.length ? `, ветре ${num(Math.min(...wv), 0)}–${num(Math.max(...wv), 0)} м/с` : ''} (${st.length} ${plural(st.length, 'рыбалка', 'рыбалки', 'рыбалок')}).`);
+  }
   if (ps.length >= 2) {
     const vals = ps.map(s => s.pStart);
     const tw = { 0: 0, 1: 0, '-1': 0 };
@@ -506,7 +551,11 @@ export function reportPage(id) {
   $('[data-act=back]', node).onclick = () => ctx.back(spot ? '#spot-' + spot.id : '#journal');
   const box = $('[data-f=wx]', node);
   const showWx = () => {
-    if (r.weather) box.replaceChildren(weatherWindow(r.weather, r.startMs, r.endMs));
+    if (r.weather) {
+      box.replaceChildren(weatherWindow(r.weather, r.startMs, r.endMs));
+      const items = SPECIES.map(sp => ({ ...sp, ...biteDay(r.weather, r.startMs, sp.id) }));
+      box.prepend(el(`<div class="bite-then"><span>Прогноз по приметам на тот день:</span>${items.map(it => `<b class="sc s${it.score}">${it.name} ${it.score}</b>`).join('')}</div>`));
+    }
     else {
       box.replaceChildren(el(`<div class="wx-err"><p>${r.endMs > Date.now() + 14 * DAY ? 'Погода для этой даты появится ближе к ней.' : 'Погода ещё не загружена — не было интернета. Подтянется сама, когда связь появится.'}</p><button type="button" class="btn sm">${icon('refresh')}Загрузить сейчас</button></div>`));
       $('button', box).onclick = async e => {

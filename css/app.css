@@ -404,6 +404,33 @@ body.deep-page .tabbar { display: none; }
 .trend.down { color: var(--down); }
 .trend.flat { color: var(--flat); }
 
+.bite { display: flex; flex-direction: column; gap: 8px; }
+.bite-grid { display: grid; gap: 4px; align-items: center; }
+.bg-day { border: 0; background: none; padding: 4px 0; font-size: 12px; font-weight: 600; color: var(--ink-2); cursor: pointer; border-radius: 6px; }
+.bg-day.on { color: var(--ink); background: var(--panel-2); }
+.bg-sp { font-size: 13.5px; font-weight: 600; }
+.bg-cell { height: 34px; border: 2px solid transparent; border-radius: 9px; font: 700 15px var(--f-body); cursor: pointer; color: #10282c; }
+.bg-cell.on { border-color: var(--ink); }
+.s1 { --sc: #e8836f; } .s2 { --sc: #f0b36a; } .s3 { --sc: #ead77a; } .s4 { --sc: #9fd28a; } .s5 { --sc: #5bbf7a; }
+.bg-cell { background: var(--sc); }
+.bite-detail { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 11px; background: var(--panel-2); }
+.page .bite-detail { background: var(--panel); border: 1px solid var(--line); }
+.bd-water { font-size: 13px; color: var(--ink-2); }
+.bd-sp + .bd-sp { padding-top: 10px; border-top: 1px solid var(--line); }
+.bd-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bd-h b { font-size: 15.5px; }
+.sc { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+.dots { display: inline-flex; gap: 3px; }
+.dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+.dots i.on { background: var(--sc); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .15); }
+.bd-best { font-size: 13px; margin-top: 2px; }
+.bd-why { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.bd-why li::before { display: inline-block; width: 16px; font-weight: 700; }
+.bd-why li.p::before { content: "+"; color: var(--flat); }
+.bd-why li.m::before { content: "−"; color: var(--danger); }
+.bite-note { font-size: 12px; color: var(--ink-2); }
+.bite-then { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); }
+.bite-then .sc { padding: 2px 8px; border-radius: 8px; background: var(--sc); color: #10282c; }
 .surge { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px 10px 14px; border-radius: 11px; background: var(--panel-2); border-left: 4px solid var(--flat); }
 .page .surge { background: var(--panel); border-top: 1px solid var(--line); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .surge.up { border-left-color: var(--up); }

@@ -1,5 +1,5 @@
 // Service worker: приложение и просмотренные куски карты работают без интернета.
-const VERSION = 'klev-v6';
+const VERSION = 'klev-v7';
 const SHELL = VERSION + '-shell';
 const TILES = 'klev-tiles';
 const LIBS = 'klev-libs';
@@ -7,7 +7,7 @@ const MAX_TILES = 2500;
 
 const SHELL_FILES = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
-  'js/app.js', 'js/map.js', 'js/depth.js', 'js/views.js', 'js/store.js', 'js/weather.js', 'js/charts.js', 'js/icons.js', 'js/db.js', 'js/util.js',
+  'js/app.js', 'js/map.js', 'js/depth.js', 'js/bite.js', 'js/views.js', 'js/store.js', 'js/weather.js', 'js/charts.js', 'js/icons.js', 'js/db.js', 'js/util.js',
   'depth/rogozhkino-1.webp', 'depth/rogozhkino-2.webp', 'depth/rogozhkino-4.webp', 'depth/rogozhkino-grid.png',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
 ];
