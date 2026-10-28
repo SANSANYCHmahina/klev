@@ -5,7 +5,7 @@ import {
 } from './util.js';
 import { icon, wxIcon, windArrow, floatSVG } from './icons.js';
 import { chart, dial, moonIcon } from './charts.js';
-import { pressureAt, windowStats, dayOf, dayPressure, moon, wcode, surge, surgeText, inSurgeArea } from './weather.js';
+import { pressureAt, windowStats, dayOf, dayPressure, moon, wcode, surge, surgeText, inSurgeArea, sstAt } from './weather.js';
 import * as S from './store.js';
 import { SPECIES, SCORE_WORD, biteForecast, biteDay } from './bite.js';
 
@@ -139,7 +139,7 @@ const scoreDots = n => `<span class="dots" aria-hidden="true">${[1, 2, 3, 4, 5].
 
 function biteDetail(day, off) {
   const w = day.items[0].water;
-  return (w ? `<p class="bd-water">Вода ≈ ${num(w.tw, 0)} °C — оценка по воздуху за последние дни${w.trend <= -2 ? ', холодает' : w.trend >= 2 ? ', теплеет' : ''}.</p>` : '') +
+  return (w ? `<p class="bd-water">Вода ≈ ${num(w.tw, 0)} °C — ${w.sea ? 'по спутниковой модели моря' : 'оценка по воздуху за последние дни'}${w.trend <= -1.5 ? ', холодает' : w.trend >= 1.5 ? ', теплеет' : ''}.</p>` : '') +
     day.items.map(it => `<div class="bd-sp">
       <div class="bd-h"><b>${it.name}</b><span class="sc s${it.score}">${scoreDots(it.score)}${it.score} · ${SCORE_WORD[it.score]}</span></div>
       ${it.best.length ? `<div class="bd-best">Лучшее время: ${it.best.join(', ')}</div>` : ''}
@@ -169,6 +169,14 @@ function biteBlock(wx, now) {
   return node;
 }
 
+function waterCell(wx, t) {
+  const v = sstAt(wx.hours, t);
+  if (v == null) return '';
+  const b = sstAt(wx.hours, t - 3 * DAY);
+  const tr = b == null ? '' : v - b <= -1 ? ', остывает' : v - b >= 1 ? ', прогревается' : '';
+  return cell('Вода', temp(v), `спутник/модель моря${wx.sstKm != null && wx.sstKm > 8 ? ` (≈${Math.round(wx.sstKm)} км)` : ''}${tr}`);
+}
+
 export function weatherLive(wx, { stale = false } = {}) {
   const now = Date.now();
   const c = wx.current && now - wx.current.t < 3 * HOUR ? wx.current : nearestHour(wx.hours, now) || {};
@@ -195,6 +203,7 @@ export function weatherLive(wx, { stale = false } = {}) {
       ${cell('Осадки', today && today.prec != null ? `${num(today.prec, 1)}<small>мм за день</small>` : '—', c.hum != null ? `влажность ${Math.round(c.hum)}%` : '')}
       ${cell('Луна', `${moonIcon(mo.phase)}<span class="v-t">${mo.name}</span>`, `освещена на ${Math.round(mo.illum * 100)}%`)}
       ${cell('Солнце', today && today.rise ? `${fTime(today.rise, wx.off)}–${fTime(today.set, wx.off)}` : '—', today && today.rise ? `день ${fDuration((today.set - today.rise) / 60000)}` : '')}
+      ${waterCell(wx, now)}
     </div>
     ${chartsHTML('Давление', 'неделя назад → прогноз на 3 дня')}
     ${daysStrip(wx, now)}
@@ -233,6 +242,7 @@ export function weatherWindow(wx, from, to, { label = 'рыбалка' } = {}) {
       ${cell('Осадки', `${num(st.prec, 1)}<small>мм</small>`, st.hum != null ? `влажность ${Math.round(st.hum)}%` : '')}
       ${cell('Луна', `${moonIcon(mo.phase)}<span class="v-t">${mo.name}</span>`, `освещена на ${Math.round(mo.illum * 100)}%`)}
       ${cell('Солнце', day && day.rise ? `${fTime(day.rise, wx.off)}–${fTime(day.set, wx.off)}` : '—', day && day.rise ? `день ${fDuration((day.set - day.rise) / 60000)}` : '')}
+      ${waterCell(wx, from)}
     </div>
     ${chartsHTML('Давление', 'неделя до рыбалки, полоса — время ловли')}
     <div class="wx-src">Open-Meteo${wx.source === 'archive' ? ' (архив)' : ''} · загружено ${fDate(wx.fetchedAt)}, ${fTime(wx.fetchedAt)}</div>

@@ -2,6 +2,7 @@
 import { fetchT, toMM, DAY, HOUR } from './util.js';
 
 const API = 'https://api.open-meteo.com/v1/forecast';
+const MARINE = 'https://marine-api.open-meteo.com/v1/marine';
 const ARCHIVE = 'https://archive-api.open-meteo.com/v1/archive';
 
 const HOURLY = 'temperature_2m,relative_humidity_2m,surface_pressure,pressure_msl,precipitation,cloud_cover,wind_speed_10m,wind_direction_10m,wind_gusts_10m,weather_code';
@@ -50,6 +51,32 @@ export function gridKey(lat, lon) {
   return la.toFixed(2) + '_' + lo.toFixed(2);
 }
 
+// Температура воды по морской модели (ближайшая морская клетка). Дальше 60 км — не используем.
+function attachSST(wx, sst) {
+  if (!sst || !sst.time || !sst.t) return;
+  if (sst.lat != null && sst.lon != null) {
+    const R = 6371, r = Math.PI / 180;
+    const dLat = (sst.lat - wx.lat) * r, dLon = (sst.lon - wx.lon) * r;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(wx.lat * r) * Math.cos(sst.lat * r) * Math.sin(dLon / 2) ** 2;
+    const km = 2 * R * Math.asin(Math.sqrt(a));
+    if (km > 60) return;
+    wx.sstKm = km;
+  }
+  const at = new Map(wx.hours.map((h, i) => [h.t, i]));
+  let n = 0;
+  sst.time.forEach((t, i) => {
+    const k = at.get(t * 1000);
+    if (k != null && sst.t[i] != null) { wx.hours[k].sst = sst.t[i]; n++; }
+  });
+  if (n) wx.hasSST = true;
+}
+
+async function fetchMarine(lat, lon) {
+  const p = new URLSearchParams({ latitude: lat.toFixed(4), longitude: lon.toFixed(4), hourly: 'sea_surface_temperature', cell_selection: 'sea', timezone: 'auto', timeformat: 'unixtime', past_days: 7, forecast_days: 7 });
+  const j = await getJSON(MARINE + '?' + p);
+  return { lat: j.latitude, lon: j.longitude, time: j.hourly?.time, t: j.hourly?.sea_surface_temperature };
+}
+
 async function fromGrid(lat, lon) {
   const k = gridKey(lat, lon);
   if (!k) return null;
@@ -60,6 +87,7 @@ async function fromGrid(lat, lon) {
     if (!j || !j.base || !j.base.hourly) return null;
     const wx = normalize(j.base, lat, lon);
     if (j.models) mergeModels(wx, j.models);
+    attachSST(wx, j.sst);
     wx.fetchedAt = (j.fetched || 0) * 1000 || Date.now();
     wx.via = 'site';
     return wx;
@@ -75,9 +103,10 @@ export async function fetchOverview(lat, lon) {
   try {
     const p = new URLSearchParams({ ...base(lat, lon), current: CURRENT, hourly: HOURLY, daily: DAILY, past_days: 7, forecast_days: 7 });
     const pm = new URLSearchParams({ ...base(lat, lon), hourly: HOURLY, models: `${NEAR_MODEL},${FAR_MODEL}`, past_days: 7, forecast_days: 7 });
-    const [j, jm] = await Promise.all([getJSON(API + '?' + p), getJSON(API + '?' + pm).catch(() => null)]);
+    const [j, jm, sea] = await Promise.all([getJSON(API + '?' + p), getJSON(API + '?' + pm).catch(() => null), fetchMarine(lat, lon).catch(() => null)]);
     const wx = normalize(j, lat, lon);
     if (jm) mergeModels(wx, jm);
+    attachSST(wx, sea);
     return wx;
   } catch (e) {
     if (g) return g; // устаревшие, но лучше, чем ничего
@@ -366,4 +395,10 @@ const CODES = {
 export function wcode(c) {
   const v = CODES[c];
   return v ? { text: v[0], icon: v[1] } : { text: '—', icon: 'cloud' };
+}
+
+// Температура воды в момент t: по морской модели, если есть.
+export function sstAt(hours, t) {
+  const v = valueAt(hours, t, 'sst');
+  return v == null ? null : v;
 }

@@ -2,7 +2,7 @@
 // Это не научная модель, а рыбацкие приметы, собранные в понятные правила:
 // каждая примета даёт плюс или минус, итог — от 1 до 5, и видно, из чего он сложился.
 import { DAY, HOUR, toMM, fTime, compass, num } from './util.js';
-import { valueAt, dayOf, surge, inSurgeArea } from './weather.js';
+import { valueAt, dayOf, surge, inSurgeArea, sstAt } from './weather.js';
 
 export const SPECIES = [
   { id: 'sazan', name: 'Сазан' },
@@ -22,6 +22,12 @@ function dayTemp(hours, t0) {
 
 // Вода догоняет воздух с запаздыванием: оцениваем её как среднее воздуха за 7–10 суток.
 export function waterEstimate(hours, t) {
+  // есть температура воды по морской модели — берём её
+  const now = sstAt(hours, t);
+  if (now != null) {
+    const before = sstAt(hours, t - 3 * DAY);
+    return { tw: now, trend: before != null ? now - before : 0, sea: true };
+  }
   const daily = [];
   for (let i = 1; i <= 10; i++) { const v = dayTemp(hours, t - i * DAY); if (v != null) daily.push(v); }
   if (daily.length < 4) return null;
