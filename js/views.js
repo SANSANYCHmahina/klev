@@ -148,12 +148,12 @@ function biteDetail(day, off) {
 }
 
 function biteBlock(wx, now) {
-  const days = biteForecast(wx, now, 4);
+  const days = biteForecast(wx, now, 7);
   if (!days.length) return null;
   const node = el(`<div class="bite">
     <div class="ch-head"><h4>Прогноз клёва</h4><span>по погоде и рыбацким приметам</span></div>
-    <div class="bite-grid" style="grid-template-columns: 74px repeat(${days.length}, minmax(0, 1fr))">
-      <span></span>${days.map((d, i) => `<button type="button" class="bg-day${i === 0 ? ' on' : ''}" data-i="${i}">${i === 0 ? 'Сегодня' : fDay(d.t, wx.off)}</button>`).join('')}
+    <div class="bite-grid" style="grid-template-columns: 58px repeat(${days.length}, minmax(0, 1fr))">
+      <span></span>${days.map((d, i) => { const [dw, dn] = fDay(d.t, wx.off).split(' '); return `<button type="button" class="bg-day${i === 0 ? ' on today' : ''}" data-i="${i}"><span>${i === 0 ? 'Сег' : dw}</span><b>${dn}</b></button>`; }).join('')}
       ${SPECIES.map((sp, k) => `<span class="bg-sp">${sp.name}</span>${days.map((d, i) => `<button type="button" class="bg-cell s${d.items[k].score}${i === 0 ? ' on' : ''}" data-i="${i}" aria-label="${sp.name}: ${d.items[k].score} из 5">${d.items[k].score}</button>`).join('')}`).join('')}
     </div>
     <div class="bite-detail" data-f="bd"></div>
@@ -162,7 +162,7 @@ function biteBlock(wx, now) {
   const det = $('[data-f=bd]', node);
   const pick = i => {
     $$('.bg-day, .bg-cell', node).forEach(b => b.classList.toggle('on', +b.dataset.i === i));
-    det.innerHTML = biteDetail(days[i], wx.off);
+    det.innerHTML = (i >= 3 ? '<p class="bd-far">Дальний прогноз: погода на этот день может ещё заметно поменяться.</p>' : '') + biteDetail(days[i], wx.off);
   };
   $$('.bg-day, .bg-cell', node).forEach(b => { b.onclick = () => pick(+b.dataset.i); });
   pick(0);
